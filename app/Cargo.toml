@@ -1,0 +1,17 @@
+[package]
+name = "notesapp"
+version = "0.1.0"
+authors = ["andylee"]
+edition = "2018"
+
+
+[dependencies]
+structopt = "0.3.14"
+exitfailure = "0.5.1"
+log = "0.4.8"
+env_logger = "0.7.1"
+rusqlite = { version="0.23.1", "features"=["chrono"]}
+chrono = "0.4.11"
+regex = "1"
+colored = "1.9"
+
