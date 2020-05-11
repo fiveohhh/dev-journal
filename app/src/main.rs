@@ -1,18 +1,13 @@
 use chrono::prelude::Utc;
 use chrono::NaiveDateTime;
 use colored::*;
+use dirs::home_dir;
 use exitfailure::ExitFailure;
-use log::{info};
+use log::info;
 use regex::Regex;
 use structopt::StructOpt;
-use dirs::home_dir;
 
-use std::{
-    env::{temp_dir},
-    fs::File,
-    io::Read,
-    process::Command,
-};
+use std::{env::temp_dir, fs::File, io::Read, process::Command};
 
 use log;
 
@@ -43,17 +38,34 @@ struct TagCnt {
 
 #[derive(StructOpt)]
 enum Notes {
-    Add { tags: String },
+    /// Add a new note to the specified tag.
+    Add {
+        /// comma seperated list of tags.  Cannot be numeric
+        tags: String,
+    },
+    /// Not implemented
     Attach { note: i32 },
-    Show { to_show: Option<String> },
-    Find { to_find: String },
+    /// displays a note or tags in a note
+    Show {
+        /// If given a tag name, shows notes in tag, if given a note id, displays the note
+        to_show: Option<String>,
+    },
+    /// Find a note
+    Find {
+        /// input is regex string to match
+        to_find: String,
+    },
+    /// Not Implemented
     Edit { to_edit: String },
-    Rm { to_delete: i32 },
+    /// deletes the specified note
+    Rm {
+        /// ID of note to delete
+        to_delete: i32,
+    },
 }
 
 fn get_db_conn() -> Connection {
     let home_dir = home_dir().unwrap().to_str().unwrap().to_owned();
-    
     let conn = Connection::open(home_dir + "/.noteapp/db.sql").unwrap();
     conn.execute_batch("PRAGMA foreign_keys=1").unwrap();
 
@@ -82,8 +94,9 @@ fn get_db_conn() -> Connection {
             
                 FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE
             
-            );"
-    ).unwrap();
+            );",
+    )
+    .unwrap();
     conn
 }
 
@@ -287,7 +300,7 @@ fn display_tags() {
         .unwrap();
     for tag in tag_iter {
         let t = tag.unwrap();
-        println!("{} ({})", t.name, t.count.to_string().yellow());
+        println!("{} ({})", t.name, t.count.to_string().blue());
     }
 }
 
@@ -310,20 +323,20 @@ where tags.name=?;",
                 text: row.get(0).unwrap(),
                 created_at: row.get(2).unwrap(),
                 last_edited: row.get(3).unwrap(),
-                tags: vec![]
-
+                tags: vec![],
             })
         })
         .unwrap();
-
-        
 
     for note in note_iter {
         let note = note.unwrap();
         let mut shortened_note = note.text.clone();
         shortened_note.truncate(30);
-        println!("• ({}) -- {}", &note.id.to_string().yellow(), &shortened_note.replace('\n', " "));
-
+        println!(
+            "• ({}) -- {}",
+            &note.id.to_string().yellow(),
+            &shortened_note.replace('\n', " ")
+        );
     }
 }
 
