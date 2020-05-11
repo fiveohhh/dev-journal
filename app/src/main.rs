@@ -2,12 +2,13 @@ use chrono::prelude::Utc;
 use chrono::NaiveDateTime;
 use colored::*;
 use exitfailure::ExitFailure;
-use log::{info, warn};
+use log::{info};
 use regex::Regex;
 use structopt::StructOpt;
+use dirs::home_dir;
 
 use std::{
-    env::{temp_dir, var, home_dir},
+    env::{temp_dir},
     fs::File,
     io::Read,
     process::Command,
@@ -43,7 +44,7 @@ struct TagCnt {
 #[derive(StructOpt)]
 enum Notes {
     Add { tags: String },
-    Attach { tags: String, note: i32 },
+    Attach { note: i32 },
     Show { to_show: Option<String> },
     Find { to_find: String },
     Edit { to_edit: String },
@@ -353,7 +354,7 @@ fn main() -> Result<(), ExitFailure> {
             println!("adding: {}", tags);
             add(tags)
         }
-        Notes::Attach { tags, note } => println!("attaching: {}", note),
+        Notes::Attach { note } => println!("attaching: {}", note),
         Notes::Show { to_show } => match to_show {
             None => display_tags(),
             Some(val) => {
