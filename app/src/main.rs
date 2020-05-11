@@ -3,17 +3,14 @@ use chrono::NaiveDateTime;
 use colored::*;
 use exitfailure::ExitFailure;
 use log::{info, warn};
-use regex::{Regex, RegexSet, SubCaptureMatches};
-use rusqlite::types::ToSql;
-use std::io::Write;
+use regex::Regex;
 use structopt::StructOpt;
 
 use std::{
-    env::{temp_dir, var},
+    env::{temp_dir, var, home_dir},
     fs::File,
     io::Read,
     process::Command,
-    process::Stdio,
 };
 
 use log;
@@ -26,6 +23,7 @@ struct Note {
     created_at: NaiveDateTime,
     last_edited: NaiveDateTime,
     text: String,
+    tags: Vec<Tag>,
 }
 
 #[derive(Debug)]
@@ -36,25 +34,55 @@ struct Tag {
     name: String,
 }
 
-struct TagWithNote {
-    tag: Tag,
-    note: Note,
+#[derive(Debug)]
+struct TagCnt {
+    name: String,
+    count: i32,
 }
 
-/// Search for a pattern in a file and display the lines that contain it.
 #[derive(StructOpt)]
 enum Notes {
     Add { tags: String },
     Attach { tags: String, note: i32 },
-    Show { toShow: Option<i32> },
-    Find { toFind: String },
-    Edit { toEdit: String },
-    Rm { toDelete: i32 },
+    Show { to_show: Option<String> },
+    Find { to_find: String },
+    Edit { to_edit: String },
+    Rm { to_delete: i32 },
 }
 
 fn get_db_conn() -> Connection {
-    let conn = Connection::open("db.sql").unwrap();
+    let home_dir = home_dir().unwrap().to_str().unwrap().to_owned();
+    
+    let conn = Connection::open(home_dir + "/.noteapp/db.sql").unwrap();
     conn.execute_batch("PRAGMA foreign_keys=1").unwrap();
+
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, 
+            created_at DATETIME NOT NULL, 
+            last_edited DATETIME NOT NULL, 
+            text VARCHAR NOT NULL
+            );
+            
+            
+            CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, 
+            created_at DATETIME NOT NULL, 
+            last_edited DATETIME NOT NULL, 
+            name  VARCHAR UNIQUE NOT NULL
+            );
+            
+            CREATE TABLE IF NOT EXISTS tag_on_note (
+                note_id int,
+                tag_id int,
+                CONSTRAINT note_tag_pk PRIMARY KEY (note_id, tag_id),
+            
+                FOREIGN KEY (note_id) REFERENCES notes (id) ON DELETE CASCADE,
+            
+                FOREIGN KEY (tag_id) REFERENCES tags (id) ON DELETE CASCADE
+            
+            );"
+    ).unwrap();
     conn
 }
 
@@ -81,7 +109,8 @@ fn get_create_tag(tag_name: &String) -> Tag {
         "INSERT INTO tags (created_at, last_edited, name)
                     VALUES (datetime('now'), datetime('now'), ?)",
         &[tag_name],
-    );
+    )
+    .unwrap();
     Tag {
         name: String::from(tag_name),
         id: conn.last_insert_rowid() as i32,
@@ -103,14 +132,22 @@ fn add(tags: String) {
     let mut editable = String::new();
     File::open(file_path)
         .expect("Could not open file")
-        .read_to_string(&mut editable);
+        .read_to_string(&mut editable)
+        .unwrap();
+
+    if editable.len() == 0 {
+        info!("No note entered.");
+        println!("No note entered");
+        return;
+    }
 
     let conn = get_db_conn();
     conn.execute(
         "INSERT INTO notes (created_at, last_edited, text)
                   VALUES (datetime('now'), datetime('now'), ?1)",
         params![editable],
-    );
+    )
+    .unwrap();
     let note_id = conn.last_insert_rowid();
     let tags_iter = tags.split(',');
 
@@ -120,8 +157,44 @@ fn add(tags: String) {
             "INSERT INTO tag_on_note (tag_id, note_id)
                     VALUES (?1, ?2)",
             params![tag.id, note_id],
-        );
+        )
+        .unwrap();
     }
+}
+
+fn get_full_note(id: i32) -> Note {
+    let conn = get_db_conn();
+    let mut note = conn
+        .query_row(
+            "SELECT id, created_at, last_edited, text FROM notes WHERE id=?",
+            &[&id],
+            |row| {
+                Ok(Note {
+                    id: row.get(0).unwrap(),
+                    created_at: row.get(1).unwrap(),
+                    last_edited: row.get(2).unwrap(),
+                    text: row.get(3).unwrap(),
+                    tags: vec![],
+                })
+            },
+        )
+        .unwrap();
+    let mut stmt = conn.prepare("SELECT id, created_at, last_edited, name FROM tags INNER JOIN tag_on_note ON tags.id = tag_on_note.tag_id where tag_on_note.note_id=?").unwrap();
+    let tags = stmt
+        .query_map(&[&id], |row| {
+            Ok(Tag {
+                id: row.get(0)?,
+                created_at: row.get(1)?,
+                last_edited: row.get(2)?,
+                name: row.get(3)?,
+            })
+        })
+        .unwrap();
+
+    for tag in tags {
+        note.tags.push(tag.unwrap());
+    }
+    note
 }
 
 fn print_hightlighted_text(text: &String, reg: &Regex) {
@@ -155,6 +228,7 @@ fn find(str_to_find: String) {
                 created_at: row.get(1)?,
                 last_edited: row.get(2)?,
                 text: row.get(3)?,
+                tags: vec![],
             })
         })
         .unwrap();
@@ -182,11 +256,94 @@ fn find(str_to_find: String) {
     }
 }
 
-fn delete_note(toDelete: i32) {
+fn delete_note(to_delete: i32) {
     let conn = get_db_conn();
-    conn.execute("DELETE FROM notes WHERE id=?", params![toDelete]);
+    conn.execute("DELETE FROM notes WHERE id=?", params![to_delete])
+        .unwrap();
 }
 
+fn display_tags() {
+    // get note counte per tag
+    let conn = get_db_conn();
+    let mut stmt = conn
+        .prepare(
+            "SELECT tags.name, count(tag_on_note.tag_id) as number_of_notes        
+    from tags
+    left join tag_on_note
+    on (tags.id = tag_on_note.tag_id)
+    group by
+        tags.id",
+        )
+        .unwrap();
+
+    let tag_iter = stmt
+        .query_map(params![], |row| {
+            Ok(TagCnt {
+                name: row.get(0)?,
+                count: row.get(1)?,
+            })
+        })
+        .unwrap();
+    for tag in tag_iter {
+        let t = tag.unwrap();
+        println!("{} ({})", t.name, t.count.to_string().yellow());
+    }
+}
+
+fn display_notes_with_tag(tag_name: String) {
+    // get note counte per tag
+    let conn = get_db_conn();
+    let mut stmt = conn
+        .prepare(
+            "SELECT notes.text, notes.id,  notes.created_at, notes.last_edited FROM notes 
+INNER JOIN tag_on_note ON notes.id = tag_on_note.note_id
+INNER JOIN tags ON tags.id = tag_on_note.tag_id
+where tags.name=?;",
+        )
+        .unwrap();
+
+    let note_iter = stmt
+        .query_map(params![tag_name], |row| {
+            Ok(Note {
+                id: row.get(1).unwrap(),
+                text: row.get(0).unwrap(),
+                created_at: row.get(2).unwrap(),
+                last_edited: row.get(3).unwrap(),
+                tags: vec![]
+
+            })
+        })
+        .unwrap();
+
+        
+
+    for note in note_iter {
+        let note = note.unwrap();
+        let mut shortened_note = note.text.clone();
+        shortened_note.truncate(30);
+        println!("• ({}) -- {}", &note.id.to_string().yellow(), &shortened_note.replace('\n', " "));
+
+    }
+}
+
+fn display_full_note(id: i32) {
+    let note = get_full_note(id);
+    let mut tags: String = String::from("");
+    for tag in note.tags {
+        tags.push_str(tag.name.as_str());
+        tags.push_str(&", ");
+    }
+
+    println!("id:      {}", note.id.to_string().blue());
+    println!("created: {}", note.created_at.to_string().blue());
+    println!("edited:  {}", note.last_edited.to_string().blue());
+    println!("tags:    {}", tags.blue());
+    println!("-----------------------content--------------------");
+    println!("{}", note.text);
+    println!("--------------------------------------------------");
+}
+
+// TODO TAG can't have number
 fn main() -> Result<(), ExitFailure> {
     env_logger::init();
     info!("Starting");
@@ -197,19 +354,22 @@ fn main() -> Result<(), ExitFailure> {
             add(tags)
         }
         Notes::Attach { tags, note } => println!("attaching: {}", note),
-        Notes::Show { toShow } => {
- 
-            match toShow {
-                None => {println!("show tags")},
-                Some(val) => {println!("show individual note")},
+        Notes::Show { to_show } => match to_show {
+            None => display_tags(),
+            Some(val) => {
+                let val_as_num = val.trim().parse::<i32>();
+                match val_as_num {
+                    Ok(num) => display_full_note(num),
+                    Err(_e) => display_notes_with_tag(val),
+                }
             }
+        },
+        Notes::Find { to_find } => {
+            println!("Searching for: {}", to_find.red());
+            find(to_find);
         }
-        Notes::Find { toFind } => {
-            println!("Searching for: {}", toFind.red());
-            find(toFind);
-        }
-        Notes::Edit { toEdit } => println!("adding: {}", toEdit),
-        Notes::Rm { toDelete } => delete_note(toDelete),
+        Notes::Edit { to_edit } => println!("NOT IMPLEMENTED: {}", to_edit),
+        Notes::Rm { to_delete } => delete_note(to_delete),
     }
 
     Ok(())
