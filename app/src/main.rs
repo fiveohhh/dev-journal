@@ -42,6 +42,8 @@ enum Notes {
     Add {
         /// comma seperated list of tags.  Cannot be numeric
         tags: String,
+        #[structopt(short, long)]
+        message: Option<String>,
     },
     /// Not implemented
     Attach { note: i32 },
@@ -133,21 +135,27 @@ fn get_create_tag(tag_name: &String) -> Tag {
     }
 }
 
-fn add(tags: String) {
+fn add(tags: String, message: Option<String>) {
     let editor = "vim";
     let mut file_path = temp_dir();
     file_path.push("editable");
     File::create(&file_path).expect("Could not create file");
-
-    Command::new(editor)
-        .arg(&file_path)
-        .status()
-        .expect("Something went wrong");
     let mut editable = String::new();
-    File::open(file_path)
-        .expect("Could not open file")
-        .read_to_string(&mut editable)
-        .unwrap();
+
+    match message {
+        Some(msg) => editable = msg,
+        None => {
+            Command::new(editor)
+                .arg(&file_path)
+                .status()
+                .expect("Something went wrong");
+
+            File::open(file_path)
+                .expect("Could not open file")
+                .read_to_string(&mut editable)
+                .unwrap();
+        }
+    };
 
     if editable.len() == 0 {
         info!("No note entered.");
@@ -363,9 +371,9 @@ fn main() -> Result<(), ExitFailure> {
     info!("Starting");
     let args = Notes::from_args();
     match args {
-        Notes::Add { tags } => {
+        Notes::Add { tags, message } => {
             println!("adding: {}", tags);
-            add(tags)
+            add(tags, message)
         }
         Notes::Attach { note } => println!("attaching: {}", note),
         Notes::Show { to_show } => match to_show {
