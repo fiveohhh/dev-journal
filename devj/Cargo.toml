@@ -1,5 +1,7 @@
 [package]
-name = "notesapp"
+name = "dev-journal"
+description = "Lightweight CLI notes/journaling application.  By developer, for developers."
+readme = "../readme"
 version = "0.1.0"
 authors = ["andylee"]
 edition = "2018"

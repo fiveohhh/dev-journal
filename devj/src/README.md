@@ -3,13 +3,6 @@
 A lightweight application meant to allow developers (or other CLI fans) to
 create tagged journal entries or notes that are easily searched/retrievable.
 
-## Usage
-
-### Create a note
-
-~~~Rust
-devj add
-~~~
 
 ## Credits
 
