@@ -1,5 +1,5 @@
 [package]
-name = "dev-journal"
+name = "devj"
 description = "Lightweight CLI notes/journaling application.  By developer, for developers."
 readme = "../README.md"
 version = "0.1.0"
