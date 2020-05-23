@@ -37,6 +37,7 @@ struct TagCnt {
 }
 
 #[derive(StructOpt)]
+#[structopt(name = "Dev Journal", about)]
 enum Notes {
     /// Add a new note to the specified tag.
     Add {

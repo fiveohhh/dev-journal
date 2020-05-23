@@ -1,6 +1,7 @@
 [package]
 name = "devj"
-description = "Lightweight CLI notes/journaling application.  By developer, for developers."
+description = "Lightweight CLI notes/journaling application.  By developers, for developers."
+repository = "https://github.com/fiveohhh/dev-journal"
 readme = "../README.md"
 version = "0.1.0"
 authors = ["andylee"]
