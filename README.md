@@ -7,13 +7,13 @@ create tagged journal entries or notes that are easily searched/retrievable.
 
 ### Create a note inline
 
-~~~Rust
+~~~Bash
 devj add mytag,anotherTag -m "Contents of my note"
 ~~~
 
 ### Create a note in default EDITOR
 
-~~~Rust
+~~~Bash
 devj add mytag 
 ~~~
 
