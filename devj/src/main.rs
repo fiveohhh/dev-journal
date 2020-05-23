@@ -7,7 +7,7 @@ use log::info;
 use regex::Regex;
 use structopt::StructOpt;
 
-use std::{env::temp_dir, fs::File, io::Read, process::Command};
+use std::{env::temp_dir, fs::File, io::Read, process::Command, fs::create_dir_all};
 
 use log;
 
@@ -68,7 +68,8 @@ enum Notes {
 
 fn get_db_conn() -> Connection {
     let home_dir = home_dir().unwrap().to_str().unwrap().to_owned();
-    let conn = Connection::open(home_dir + "/.noteapp/db.sql").unwrap();
+    create_dir_all(home_dir.clone() + "/.devj").unwrap();
+    let conn = Connection::open(home_dir + "/.devj/db.sql").unwrap();
     conn.execute_batch("PRAGMA foreign_keys=1").unwrap();
 
     conn.execute_batch(
